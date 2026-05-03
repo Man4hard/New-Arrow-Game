@@ -1,0 +1,156 @@
+====================================================
+  ARROWS PUZZLE — FRESH REWRITE SETUP GUIDE
+  Copyright (c) 2025 [YOUR NAME HERE] — MIT License
+====================================================
+
+All C# scripts have been written from scratch with an original architecture.
+No code from the original repository was copied.
+You own these scripts 100% and may publish freely.
+
+============================================================
+FOLDER STRUCTURE
+============================================================
+
+Assets/
+  _Core/Scripts/
+    Singleton/
+      MonoSingleton.cs        — Generic singleton base (no DontDestroyOnLoad)
+    State/
+      GameState.cs            — Enum: None, Loading, Playing, Won, Lost, Paused
+      GameStateController.cs  — Central state machine, fires events on transitions
+    Levels/
+      LevelDefinition.cs      — Attach to every level prefab root
+      LevelController.cs      — Loads from Resources/Levels, handles progression
+    Input/
+      ISelectable.cs          — Interface: implement on clickable objects
+      PlayerInputData.cs      — ScriptableObject: carries pointer state between systems
+      InputReader.cs          — Reads touch/mouse, writes to PlayerInputData
+      ClickSelector.cs        — Physics2D overlap → finds ISelectable → calls OnSelected
+    Audio/
+      SoundEntry.cs           — Serializable data container for one sound
+      SoundManager.cs         — Pool-based audio manager, key-lookup system
+    UI/
+      Lives/
+        LifeTracker.cs        — Counts lives, fires events, time-based loss cooldown
+        HeartIcon.cs          — Controls one heart sprite (full/empty)
+        HeartDisplay.cs       — Syncs row of HeartIcon to LifeTracker events
+      Screens/
+        UIScreen.cs           — Base class for all UI panels (CanvasGroup show/hide)
+        HUDScreen.cs          — In-game HUD (level label, hearts)
+        WinScreen.cs          — "Well Done" panel with Next button
+        LoseScreen.cs         — "Try Again" panel with Retry button
+        SettingsScreen.cs     — Sound toggle, close button
+        UIRoot.cs             — Singleton hub, exposes OpenSettings()
+    Utilities/
+      SaveSystem.cs           — PlayerPrefs wrapper with debounce, PrefKeys constants
+      TraceLog.cs             — Debug wrapper, auto-silenced in release builds
+
+  _Game/Scripts/
+    Line/
+      ArrowLine.cs            — Root component per arrow; coordinates all sub-systems
+      ArrowLineRegistry.cs    — Tracks active arrows; fires OnAllCleared for win condition
+      ArrowAnimator.cs        — Forward/backward slide animation, no per-frame GC alloc
+      ArrowDestroyTimer.cs    — Destroys arrow after N seconds once tapped
+      ArrowHead.cs            — Follows line tip, rotates, hosts CircleCollider2D trigger
+      ArrowColliderSync.cs    — Pools BoxCollider2D segments to match LineRenderer path
+      ArrowMaterial.cs        — Typed colour management (flash failure, restore)
+      GridSnapper.cs          — Snaps LineRenderer points to grid (editor or runtime)
+      ArrayPoolProvider.cs    — Stack-based Vector3[] pool, no GameObject overhead
+    UI/
+      WinConditionWatcher.cs  — Wires ArrowLineRegistry + LifeTracker → GameStateController
+
+============================================================
+HOW TO SET UP A NEW UNITY PROJECT
+============================================================
+
+1. Create a new Unity 2022 LTS (or 2023+) project with URP.
+
+2. Copy the Assets/ folder from this archive into your project's Assets/ folder.
+
+3. Create a ScriptableObject for input:
+   • Right-click in Project → Create → ArrowsPuzzle → PlayerInputData
+   • Name it "PlayerInputData" and save it somewhere in Assets/
+
+4. Scene setup — add these GameObjects to your scene:
+   ┌─ Managers (empty)
+   │    ├─ GameStateController   (add component)
+   │    ├─ LevelController       (add component)
+   │    ├─ LifeTracker           (add component)
+   │    ├─ SoundManager          (add component, assign SoundEntry list)
+   │    └─ InputReader           (add component, assign PlayerInputData SO)
+   │
+   ├─ Selectors (empty)
+   │    └─ ClickSelector         (add component, assign PlayerInputData SO + LayerMask)
+   │
+   └─ UI (Canvas)
+        ├─ HUDScreen             (add HUDScreen component + CanvasGroup)
+        ├─ WinScreen             (add WinScreen component + CanvasGroup + Button)
+        ├─ LoseScreen            (add LoseScreen component + CanvasGroup + Button)
+        ├─ SettingsScreen        (add SettingsScreen + CanvasGroup + Toggle + Button)
+        ├─ HeartDisplay          (add HeartDisplay, list HeartIcon children)
+        └─ UIRoot                (add UIRoot component)
+
+5. Level prefabs:
+   • Create a prefab, add LevelDefinition component to the root.
+   • Inside, add your LineRenderer GameObjects.
+   • Each LineRenderer object needs:
+       - ArrowLine       (root)
+       - ArrowAnimator   (same or child)
+       - ArrowDestroyTimer
+       - ArrowColliderSync  (+ assign segmentPrefab)
+       - ArrowHead       (child object, will get physics components auto-added)
+       - ArrowMaterial
+   • Place level prefabs in: Assets/Resources/Levels/
+     Name them "Level 1", "Level 2", … "Level 15" etc.
+
+6. ArrowLineRegistry:
+   • Add an ArrowLineRegistry component to a scene manager object.
+   • The LevelController calls InitialiseLevel() — wire this via
+     LevelDefinition.OnLevelReady or call it from a custom bootstrap script.
+
+7. Layers:
+   • Create a Unity layer called "Arrow" (or similar).
+   • Assign it to all ArrowLine/collider objects.
+   • Set ClickSelector._selectableLayers to that layer.
+
+8. Physics 2D:
+   • Open Project Settings → Physics 2D.
+   • Make sure arrow colliders can trigger against each other
+     (layer matrix diagonal checkbox must be enabled for your Arrow layer).
+
+============================================================
+WHAT YOU STILL NEED TO BRING FROM THE ORIGINAL
+============================================================
+
+The following are ASSETS, not code — they are not copyright-sensitive
+IF you created them yourself or purchased a license for them separately:
+
+  • Level prefab data (LineRenderer point positions) — you must re-enter
+    these or export them before deleting the original project.
+  • Sprite assets (arrow head image, heart icons)
+  • Audio files (.wav/.mp3 for movement and collision sounds)
+  • Materials for the LineRenderer
+
+The gameplay mechanic (arrows that slide and collide) is not copyrightable.
+Only the specific code implementation is — and that has been fully rewritten here.
+
+============================================================
+KEY IMPROVEMENTS OVER THE ORIGINAL (bugs fixed)
+============================================================
+
+• Level sorting uses real natural sort — "Level 10" now comes after "Level 9".
+• Life loss uses a time-based cooldown (not frame equality) — more robust.
+• ArrowAnimator uses a fixed working buffer — no per-frame heap allocations.
+• ArrowMaterial uses typed lists (LineRenderer/SpriteRenderer) — no base-class casting.
+• ArrayPoolProvider is a plain Stack<Vector3[]> — no GameObject wrappers.
+• ArrowDestroyTimer guard logic is correct — Cancel() always works.
+• GridSnapper disabled at runtime by default — no accidental snap in production.
+• Debug rays disabled by default — won't draw in release builds.
+• Dead event handler stubs removed (no empty subscription noise).
+
+============================================================
+LICENSE
+============================================================
+
+MIT License — Copyright (c) 2025 [YOUR NAME HERE]
+Replace [YOUR NAME HERE] in LICENSE.txt and all file headers before publishing.
